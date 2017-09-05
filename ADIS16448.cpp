@@ -276,25 +276,6 @@ ImuDataRaw *ADIS16448::readAll(void) {
     data.gdx = regRead32(XGYRO_DELTAANG_OUT);
     data.gdy = regRead32(YGYRO_DELTAANG_OUT);
     data.gdz = regRead32(ZGYRO_DELTAANG_OUT);
-//  static int16_t burstwords[15];
-//  burstwords[0] = regRead(DIAG_STAT);
-//  burstwords[1] = regRead(XGYRO_OUT);
-//  burstwords[2] = regRead(YGYRO_OUT);
-//  burstwords[3] = regRead(ZGYRO_OUT);
-//  burstwords[4] = regRead(XACCL_OUT);
-//  burstwords[5] = regRead(YACCL_OUT);
-//  burstwords[6] = regRead(ZACCL_OUT);
-//  burstwords[7] = regRead(XMAGN_OUT);
-//  burstwords[8] = regRead(YMAGN_OUT);
-//  burstwords[9] = regRead(ZMAGN_OUT);
-//  burstwords[10] = regRead(BARO_OUT);
-//  burstwords[11] = regRead(TEMP_OUT);
-//  burstwords[12] = regRead(XGYRO_DELTAANG_OUT);
-//  burstwords[13] = regRead(YGYRO_DELTAANG_OUT);
-//  burstwords[14] = regRead(ZGYRO_DELTAANG_OUT);
-////  digitalWrite(_CS, LOW);
-////  digitalWrite(_CS, HIGH);
-//  return burstwords;
     return &data;
 }
 

@@ -50,13 +50,12 @@
 
 const int dbgpin = 3;
 
-const float gdelta_scale = 0.022; // 720.0/(2^15);
-const float gscale = 450.0/pow(2,31);
+//const float gdelta_scale = 0.022; // 720.0/(2^15);
+//const float gscale = 450.0/pow(2,31);
 const float imu_dt = 1.0/(2460/4);
 
 // Initialize Variables
 // Temporary Data Array
-volatile int16_t *burstData;
 ImuDataRaw *imuDataRaw;
 ImuData *imuData;
 
@@ -98,12 +97,6 @@ void setup()
     pinMode(dbgpin, OUTPUT);
     IMU.configSPI(); // Configure SPI communication
     delay(1000); // Give the part time to start up
-//    IMU.regWrite(MSC_CTRL, 0x16);  // Enable Data Ready, set polarity
-//    delay(20); 
-    //IMU.regWrite(SENS_AVG, 0x402); // Set digital filter
-    //delay(20);
-//    IMU.regWrite(SMPL_PRD, 0x01), // Disable decimation
-//    delay(20);
 
     // Set decimation rate to 4 -> 616Hz
     IMU.regWrite(PAGE_ID, 3); // turn to page 3
@@ -114,11 +107,6 @@ void setup()
     IMU.regWrite(PAGE_ID, 0); // turn to page 0 to continue normal operation
     delay(20);
 
-    // Read the control registers once to print to screen
-    //MSC = IMU.regRead(MSC_CTRL);
-//    SENS = IMU.regRead(SENS_AVG);
-    //SMPL = IMU.regRead(SMPL_PRD);
-//    Serial.println("start");
 
     t_start = millis();
     t_prev=t_start;
@@ -173,28 +161,6 @@ void grabData()
     attachInterrupt(2,grabData,RISING);
 }
 
-// Function used to scale all acquired data (scaling functions are included in ADIS16448.cpp)
-void scaleData()
-{
-    GXS = IMU.gyroScale(*(burstData + 1)); //Scale X Gyro
-    GYS = IMU.gyroScale(*(burstData + 2)); //Scale Y Gyro
-    GZS = IMU.gyroScale(*(burstData + 3)); //Scale Z Gyro
-    AXS = IMU.accelScale(*(burstData + 4)); //Scale X Accel
-    AYS = IMU.accelScale(*(burstData + 5)); //Scale Y Accel
-    AZS = IMU.accelScale(*(burstData + 6)); //Scale Z Accel
-    MXS = IMU.magnetometerScale(*(burstData + 7)); //Scale X Mag
-    MYS = IMU.magnetometerScale(*(burstData + 8)); //Scale Y Mag
-    MZS = IMU.magnetometerScale(*(burstData + 9)); //Scale Z Mag
-    BAROS = IMU.pressureScale(*(burstData + 10)); //Scale Pressure Sensor
-    TEMPS = IMU.tempScale(*(burstData + 11)); //Scale Temp Sensor
-//    GDELTAXS = IMU.gyroDeltaScale(*(burstData + 12));
-//    GDELTAYS = IMU.gyroDeltaScale(*(burstData + 13));
-//    GDELTAZS = IMU.gyroDeltaScale(*(burstData + 14));  
-//    GDELTAXS = IMU.gyroDeltaScale(gdxraw);
-//    GDELTAYS = IMU.gyroDeltaScale(gdyraw);
-//    GDELTAZS = IMU.gyroDeltaScale(gdzraw);  
-}
-
 // Main loop. Print data to the serial port. Sensor sampling is performed in the ISR
 void loop() {   
     //uint32_t t_start = millis();
@@ -224,7 +190,6 @@ void loop() {
 //        t_bias=t_now;
 //        Serial.println("bias null");
 //    }
-    //scaleData();
 
 //    Serial.print(imuData->gx,4); Serial.print(",");
 //    Serial.print(imuData->gy,4); Serial.print(",");
@@ -270,106 +235,9 @@ void loop() {
         GDELTAXS = 0; GDELTAYS = 0; GDELTAZS = 0;
         Serial.print("calib bias null start");
     }
-//    if(IMU.isCalibrating())
-//        Serial.print("C");
 
       
     Serial.println();
     attachInterrupt(2, grabData, RISING);
     delay(50);
-    
-//    printCounter ++;
-//    if (printCounter >= 200000) // Delay for writing data to the serial port
-//    {
-        //detachInterrupt(2); //Detach interrupt to avoid overwriting data
-        /*scaleData(); // Scale data acquired from the IMU
-
-        //Clear the serial terminal and reset cursor
-        //Only works on supported serial terminal programs (Putty)
-        Serial.print("\033[2J");
-        Serial.print("\033[H");
-
-        // Print header
-        Serial.println(" ");
-        Serial.println("ADIS16448 Teensy Burst Read Example Program");
-        Serial.println("Juan Chong - September 2016");
-        Serial.println(" ");
-
-        // Print control registers to the serial port
-        Serial.println("Control Registers");
-        Serial.print("MSC_CTRL: ");
-        Serial.println(MSC,HEX);
-        Serial.print("SENS_AVG: ");
-        Serial.println(SENS,HEX);
-        Serial.print("SMPL_PRD: ");
-        Serial.println(SMPL,HEX);
-        Serial.println(" ");
-        Serial.println("Raw Output Registers");
-        
-        // Print scaled gyro data
-        Serial.print("XGYRO: ");
-        Serial.println(GXS);
-        Serial.print("YGYRO: ");
-        Serial.println(GYS);
-        Serial.print("ZGYRO: ");
-        Serial.println(GZS);
-      
-        // Print scaled accel data
-        Serial.print("XACCL: ");
-        Serial.println(AXS);
-        Serial.print("YACCL: ");
-        Serial.println(AYS);
-        Serial.print("ZACCL: ");
-        Serial.println(AZS);
-
-        // Print scaled magnetometer data
-        Serial.print("XMAG: ");
-        Serial.println(MXS);
-        Serial.print("YMAG: ");
-        Serial.println(MYS);
-        Serial.print("ZMAG: ");
-        Serial.println(MZS);
-
-        // Print scaled barometer data
-        Serial.print("BARO: ");
-        Serial.println(BAROS);
-
-        // Print scaled temp data
-        Serial.print("TEMP: ");
-        Serial.println(TEMPS);
-        Serial.println(" ");
-
-        Serial.println("Status Registers");
-
-        // Print Status Registers
-        Serial.print("DIAG_STAT: ");
-        Serial.println((*(burstData + 0)));
-        Serial.print("CHECKSUM: ");
-        Serial.println((*(burstData + 9)));
- 
-#ifdef DEBUG 
-        // Print unscaled gyro data
-        Serial.print("XGYRO: ");
-        Serial.println((*(burstData + 1)));
-        Serial.print("YGYRO: ");
-        Serial.println((*(burstData + 2)));
-        Serial.print("ZGYRO: ");
-        Serial.println((*(burstData + 3)));
-      
-        // Print unscaled accel data
-        Serial.print("XACCL: ");
-        Serial.println((*(burstData + 4)));
-        Serial.print("YACCL: ");
-        Serial.println((*(burstData + 5)));
-        Serial.print("ZACCL: ");
-        Serial.println((*(burstData + 6)));
-        Serial.println(" ");
-       
-        // Print unscaled temp data
-        Serial.print("TEMP: ");
-        Serial.println((*(burstData + 7)));
-#endif
-        printCounter = 0;
-        //attachInterrupt(2, grabData, RISING);
-//    }*/
 }
