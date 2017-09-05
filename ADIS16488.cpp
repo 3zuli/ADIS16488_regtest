@@ -2,10 +2,10 @@
 //  September 2016
 //  Author: Juan Jose Chong <juan.chong@analog.com>
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  ADIS16448.cpp
+//  ADIS16488.cpp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 
-//  This library provides all the functions necessary to interface the ADIS16448 IMU with a 
+//  This library provides all the functions necessary to interface the ADIS16488 IMU with a 
 //  PJRC 32-Bit Teensy 3.2 Development Board. Functions for SPI configuration, reads and writes,
 //  and scaling are included. This library may be used for the entire ADIS1646X family of devices 
 //  with some modification.
@@ -31,7 +31,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "ADIS16448.h"
+#include "ADIS16488.h"
 
 ////////////////////////////////////////////////////////////////////////////
 // Constructor with configurable CS, DR, and RST
@@ -40,7 +40,7 @@
 // DR - DR output pin for data ready
 // RST - Hardware reset pin
 ////////////////////////////////////////////////////////////////////////////
-ADIS16448::ADIS16448(int CS, int DR, int RST) {
+ADIS16488::ADIS16488(int CS, int DR, int RST) {
   _CS = CS;
   _DR = DR;
   _RST = RST;
@@ -59,7 +59,7 @@ ADIS16448::ADIS16448(int CS, int DR, int RST) {
 ////////////////////////////////////////////////////////////////////////////
 // Destructor
 ////////////////////////////////////////////////////////////////////////////
-ADIS16448::~ADIS16448() {
+ADIS16488::~ADIS16488() {
   // Close SPI bus
   SPI.end();
 }
@@ -67,7 +67,7 @@ ADIS16448::~ADIS16448() {
 ////////////////////////////////////////////////////////////////////////////
 // Performs a hardware reset by setting _RST pin low for delay (in ms).
 ////////////////////////////////////////////////////////////////////////////
-int ADIS16448::resetDUT(uint8_t ms) {
+int ADIS16488::resetDUT(uint8_t ms) {
   digitalWrite(_RST, LOW);
   delay(100);
   digitalWrite(_RST, HIGH);
@@ -75,7 +75,7 @@ int ADIS16448::resetDUT(uint8_t ms) {
   return(1);
 }
 
-int ADIS16448::swReset(){
+int ADIS16488::swReset(){
     regWrite(PAGE_ID, 3); // turn to page 3
     regWrite(GLOB_CMD, 1 << 7); // set Software reset bit in GLOB_CMD register
     delay(150); // wait at least 120ms
@@ -86,7 +86,7 @@ int ADIS16448::swReset(){
 // when there are multiple SPI devices using different settings.
 // Returns 1 when complete.
 ////////////////////////////////////////////////////////////////////////////
-int ADIS16448::configSPI() {
+int ADIS16488::configSPI() {
   SPISettings IMUSettings(2000000, MSBFIRST, SPI_MODE3);
   SPI.beginTransaction(IMUSettings);
   return(1);
@@ -98,7 +98,7 @@ int ADIS16448::configSPI() {
 // regAddr - address of register to be read
 // return - (int) signed 16 bit 2's complement number
 ////////////////////////////////////////////////////////////////////////////////////////////
-int16_t ADIS16448::regRead(uint8_t regAddr) {
+int16_t ADIS16488::regRead(uint8_t regAddr) {
 //Read registers using SPI
   
   // Write register address to be read
@@ -129,7 +129,7 @@ int16_t ADIS16448::regRead(uint8_t regAddr) {
 // regAddr - address of register to be read
 // return - (int) signed 16 bit 2's complement number
 ////////////////////////////////////////////////////////////////////////////////////////////
-int32_t ADIS16448::regRead32(uint8_t regAddr) {
+int32_t ADIS16488::regRead32(uint8_t regAddr) {
   // Write OUT register address to be read
   digitalWrite(_CS, LOW); // Set CS low to enable device
   SPI.transfer(regAddr); // Write address over SPI bus
@@ -167,7 +167,7 @@ int32_t ADIS16448::regRead32(uint8_t regAddr) {
 // regAddr - address of register to be written
 // regData - data to be written to the register
 ////////////////////////////////////////////////////////////////////////////
-int ADIS16448::regWrite(uint8_t regAddr, int16_t regData) {
+int ADIS16488::regWrite(uint8_t regAddr, int16_t regData) {
 
   // Write register address and data
   uint16_t addr = (((regAddr & 0x7F) | 0x80) << 8); // Toggle sign bit, and check that the address is 8 bits
@@ -199,7 +199,7 @@ int ADIS16448::regWrite(uint8_t regAddr, int16_t regData) {
 ////////////////////////////////////////////////////////////////////////////
 // No inputs required.
 ////////////////////////////////////////////////////////////////////////////
-int16_t *ADIS16448::burstRead(void) {
+int16_t *ADIS16488::burstRead(void) {
 	uint8_t burstdata[26];
 	static int16_t burstwords[13];
 	// Trigger Burst Read
@@ -260,7 +260,7 @@ int16_t *ADIS16448::burstRead(void) {
 ////////////////////////////////////////////////////////////////////////////
 // No inputs required.
 /////////////////////////////////////////////////////////////////////////////////////////
-ImuDataRaw *ADIS16448::readAll(void) {
+ImuDataRaw *ADIS16488::readAll(void) {
     static ImuDataRaw data;
     data.temp = regRead(TEMP_OUT);
     data.gx = regRead32(XGYRO_OUT);
@@ -279,7 +279,7 @@ ImuDataRaw *ADIS16448::readAll(void) {
     return &data;
 }
 
-ImuData *ADIS16448::scaleData(ImuDataRaw *raw){
+ImuData *ADIS16488::scaleData(ImuDataRaw *raw){
     static ImuData data;
     data.gx = gyroScale32(raw->gx);
     data.gy = gyroScale32(raw->gy);
@@ -298,7 +298,7 @@ ImuData *ADIS16448::scaleData(ImuDataRaw *raw){
     return &data;
 }
 
-void ADIS16448::calibrateBiasNull(){
+void ADIS16488::calibrateBiasNull(){
     regWrite(PAGE_ID, 3); // turn to page 3
     regWrite(GLOB_CMD, 0x01); // set Bias null bit in GLOB_CMD register
     delay(20);
@@ -307,7 +307,7 @@ void ADIS16448::calibrateBiasNull(){
     t_bias=millis(); 
 }
 
-uint32_t ADIS16448::getLastCalibTime(){
+uint32_t ADIS16488::getLastCalibTime(){
     return t_bias;
 }
 
@@ -318,12 +318,12 @@ uint32_t ADIS16448::getLastCalibTime(){
 // sensorData - data output from regRead()
 // return - (float) signed/scaled accelerometer in g's
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::accelScale(int16_t sensorData)
+float ADIS16488::accelScale(int16_t sensorData)
 {
   float finalData = sensorData * aScale; // Multiply by accel sensitivity (1/1200 g/LSB)
   return finalData;
 }
-float ADIS16448::accelScale32(int32_t sensorData)
+float ADIS16488::accelScale32(int32_t sensorData)
 {
   float finalData = sensorData * aScale32; // Multiply by accel sensitivity (1/1200 g/LSB)
   return finalData;
@@ -335,12 +335,12 @@ float ADIS16448::accelScale32(int32_t sensorData)
 // sensorData - data output from regRead()
 // return - (float) signed/scaled gyro in degrees/sec
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::gyroScale(int16_t sensorData)
+float ADIS16488::gyroScale(int16_t sensorData)
 {
   float finalData = sensorData * gScale;
   return finalData;
 }
-float ADIS16448::gyroScale32(int32_t sensorData)
+float ADIS16488::gyroScale32(int32_t sensorData)
 {
   float finalData = sensorData * gScale32;
   return finalData;
@@ -352,12 +352,12 @@ float ADIS16448::gyroScale32(int32_t sensorData)
 // sensorData - data output from regRead()
 // return - (float) signed/scaled gyro in degrees/sec
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::gyroDeltaScale(int16_t sensorData)
+float ADIS16488::gyroDeltaScale(int16_t sensorData)
 {
   float finalData = sensorData * gDScale;
   return finalData;
 }
-float ADIS16448::gyroDeltaScale32(int32_t sensorData)
+float ADIS16488::gyroDeltaScale32(int32_t sensorData)
 {
   float finalData = sensorData * gDScale32;
   return finalData;
@@ -370,7 +370,7 @@ float ADIS16448::gyroDeltaScale32(int32_t sensorData)
 // sensorData - data output from regRead()
 // return - (float) signed/scaled temperature in degrees Celcius
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::tempScale(int16_t sensorData)
+float ADIS16488::tempScale(int16_t sensorData)
 {
   float finalData = (sensorData * 0.00565)+25; // Multiply by temperature scale and add 31 to equal 0x0000
   return finalData;
@@ -382,12 +382,12 @@ float ADIS16448::tempScale(int16_t sensorData)
 // sensorData - data output from regRead()
 // return - (float) signed/scaled pressure in mBar
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::pressureScale(int16_t sensorData)
+float ADIS16488::pressureScale(int16_t sensorData)
 {
   float finalData = (sensorData * barScale); // Multiply by barometer sensitivity (0.04 mBar/LSB)
   return finalData;
 }
-float ADIS16448::pressureScale32(int32_t sensorData)
+float ADIS16488::pressureScale32(int32_t sensorData)
 {
   float finalData = (sensorData * barScale32); // Multiply by barometer sensitivity (0.04 mBar/LSB)
   return finalData;
@@ -400,7 +400,7 @@ float ADIS16448::pressureScale32(int32_t sensorData)
 // sensorData - data output from regRead()
 // return - (float) signed/scaled magnetometer data in mgauss
 /////////////////////////////////////////////////////////////////////////////////////////
-float ADIS16448::magnetometerScale(int16_t sensorData)
+float ADIS16488::magnetometerScale(int16_t sensorData)
 {
   float finalData = (sensorData * mScale); // Multiply by sensor resolution (0.1 uGa/LSB)
   return finalData;

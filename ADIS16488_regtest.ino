@@ -2,10 +2,10 @@
 //  September 2016
 //  Author: Juan Jose Chong <juan.chong@analog.com>
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  ADIS16448_Teensy_BurstRead_Example.ino
+//  ADIS16488_Teensy_BurstRead_Example.ino
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 
-//  This Arduino project interfaces with an ADIS16448 using SPI and the 
+//  This Arduino project interfaces with an ADIS16488 using SPI and the 
 //  accompanying C++ libraries, reads IMU data in LSBs, scales the data, and 
 //  outputs measurements to a serial debug terminal (PuTTY) via the onboard 
 //  USB serial port.
@@ -41,7 +41,7 @@
 //  DR = D2
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-#include "ADIS16448.h"
+#include "ADIS16488.h"
 #include <SPI.h>
 #include <cmath>
 
@@ -85,8 +85,8 @@ float TEMPS = 0;
 // Delay counter variable
 int printCounter = 0;
 
-// Call ADIS16448 Class
-ADIS16448 IMU(10,2,6); // Chip Select, Data Ready, Reset Pin Assignments
+// Call ADIS16488 Class
+ADIS16488 IMU(10,2,6); // Chip Select, Data Ready, Reset Pin Assignments
 
 uint32_t t_start, t_prev, t_bias;
 bool bias_set = false;

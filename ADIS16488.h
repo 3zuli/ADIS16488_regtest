@@ -2,10 +2,10 @@
 //  September 2016
 //  Author: Juan Jose Chong <juan.chong@analog.com>
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-//  ADIS16448.h
+//  ADIS16488.h
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // 
-//  This library provides all the functions necessary to interface the ADIS16448 IMU with a 
+//  This library provides all the functions necessary to interface the ADIS16488 IMU with a 
 //  PJRC 32-Bit Teensy 3.2 Development Board. Functions for SPI configuration, reads and writes,
 //  and scaling are included. This library may be used for the entire ADIS1646X family of devices 
 //  with some modification.
@@ -31,8 +31,8 @@
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef ADIS16448_h
-#define ADIS16448_h
+#ifndef ADIS16488_h
+#define ADIS16488_h
 #include "Arduino.h"
 #include <SPI.h>
 #include <cmath>
@@ -105,17 +105,17 @@ typedef struct ImuData {
   float baro, temp; 
 } ImuData;
 
-// ADIS16448 class definition
-class ADIS16448 {
+// ADIS16488 class definition
+class ADIS16488 {
 
 public:
   // Constructor with configurable CS, data ready, and HW reset pins
 
-  // ADIS16448(int CS, int DR, int RST, int MOSI, int MISO, int CLK);
-  ADIS16448(int CS, int DR, int RST);
+  // ADIS16488(int CS, int DR, int RST, int MOSI, int MISO, int CLK);
+  ADIS16488(int CS, int DR, int RST);
 
   // Destructor
-  ~ADIS16448();
+  ~ADIS16488();
 
   // Performs hardware reset by sending pin 8 low on the DUT for 2 seconds
   int resetDUT(uint8_t ms);
