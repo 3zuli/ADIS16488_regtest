@@ -75,6 +75,12 @@ int ADIS16448::resetDUT(uint8_t ms) {
   return(1);
 }
 
+int ADIS16448::swReset(){
+    regWrite(PAGE_ID, 3); // turn to page 3
+    regWrite(GLOB_CMD, 1 << 7); // set Software reset bit in GLOB_CMD register
+    delay(150); // wait at least 120ms
+}
+
 ////////////////////////////////////////////////////////////////////////////
 // Sets SPI bit order, clock divider, and data mode. This function is useful
 // when there are multiple SPI devices using different settings.
@@ -148,7 +154,7 @@ int32_t ADIS16448::regRead32(uint8_t regAddr) {
   delayMicroseconds(_stall); // Delay to not violate read rate 
   
 
-  int32_t _dataOut = (_dataOutH << 8) | (_dataOutL & 0xFF); // Concatenate upper and lower bytes
+  int32_t _dataOut = ((int32_t)_dataOutH << 16) | ((int32_t)_dataOutL & 0xFFFF); // Concatenate upper and lower bytes
   // Shift MSB data left by 8 bits, mask LSB data with 0xFF, and OR both bits.
   
   return(_dataOut);
@@ -254,26 +260,74 @@ int16_t *ADIS16448::burstRead(void) {
 ////////////////////////////////////////////////////////////////////////////
 // No inputs required.
 /////////////////////////////////////////////////////////////////////////////////////////
-int16_t *ADIS16448::readAll(void) {
-  static int16_t burstwords[15];
-  burstwords[0] = regRead(DIAG_STAT);
-  burstwords[1] = regRead(XGYRO_OUT);
-  burstwords[2] = regRead(YGYRO_OUT);
-  burstwords[3] = regRead(ZGYRO_OUT);
-  burstwords[4] = regRead(XACCL_OUT);
-  burstwords[5] = regRead(YACCL_OUT);
-  burstwords[6] = regRead(ZACCL_OUT);
-  burstwords[7] = regRead(XMAGN_OUT);
-  burstwords[8] = regRead(YMAGN_OUT);
-  burstwords[9] = regRead(ZMAGN_OUT);
-  burstwords[10] = regRead(BARO_OUT);
-  burstwords[11] = regRead(TEMP_OUT);
-  burstwords[12] = regRead(XGYRO_DELTAANG_OUT);
-  burstwords[13] = regRead(YGYRO_DELTAANG_OUT);
-  burstwords[14] = regRead(ZGYRO_DELTAANG_OUT);
-//  digitalWrite(_CS, LOW);
-//  digitalWrite(_CS, HIGH);
-  return burstwords;
+ImuDataRaw *ADIS16448::readAll(void) {
+    static ImuDataRaw data;
+    data.temp = regRead(TEMP_OUT);
+    data.gx = regRead32(XGYRO_OUT);
+    data.gy = regRead32(YGYRO_OUT);
+    data.gz = regRead32(ZGYRO_OUT);
+    data.ax = regRead32(XACCL_OUT);
+    data.ay = regRead32(YACCL_OUT);
+    data.az = regRead32(ZACCL_OUT);
+    data.mx = regRead(XMAGN_OUT);
+    data.my = regRead(YMAGN_OUT);
+    data.mz = regRead(ZMAGN_OUT);
+    data.baro = regRead32(BARO_OUT);
+    data.gdx = regRead32(XGYRO_DELTAANG_OUT);
+    data.gdy = regRead32(YGYRO_DELTAANG_OUT);
+    data.gdz = regRead32(ZGYRO_DELTAANG_OUT);
+//  static int16_t burstwords[15];
+//  burstwords[0] = regRead(DIAG_STAT);
+//  burstwords[1] = regRead(XGYRO_OUT);
+//  burstwords[2] = regRead(YGYRO_OUT);
+//  burstwords[3] = regRead(ZGYRO_OUT);
+//  burstwords[4] = regRead(XACCL_OUT);
+//  burstwords[5] = regRead(YACCL_OUT);
+//  burstwords[6] = regRead(ZACCL_OUT);
+//  burstwords[7] = regRead(XMAGN_OUT);
+//  burstwords[8] = regRead(YMAGN_OUT);
+//  burstwords[9] = regRead(ZMAGN_OUT);
+//  burstwords[10] = regRead(BARO_OUT);
+//  burstwords[11] = regRead(TEMP_OUT);
+//  burstwords[12] = regRead(XGYRO_DELTAANG_OUT);
+//  burstwords[13] = regRead(YGYRO_DELTAANG_OUT);
+//  burstwords[14] = regRead(ZGYRO_DELTAANG_OUT);
+////  digitalWrite(_CS, LOW);
+////  digitalWrite(_CS, HIGH);
+//  return burstwords;
+    return &data;
+}
+
+ImuData *ADIS16448::scaleData(ImuDataRaw *raw){
+    static ImuData data;
+    data.gx = gyroScale32(raw->gx);
+    data.gy = gyroScale32(raw->gy);
+    data.gz = gyroScale32(raw->gz);
+    data.gdx = gyroDeltaScale32(raw->gdx);
+    data.gdy = gyroDeltaScale32(raw->gdy);
+    data.gdz = gyroDeltaScale32(raw->gdz);
+    data.ax = accelScale32(raw->ax);
+    data.ay = accelScale32(raw->ay);
+    data.az = accelScale32(raw->az);
+    data.mx = magnetometerScale(raw->mx);
+    data.my = magnetometerScale(raw->my);
+    data.mz = magnetometerScale(raw->mz);
+    data.temp = tempScale(raw->temp);
+    data.baro = pressureScale(raw->baro);
+    return &data;
+}
+
+void ADIS16448::calibrateBiasNull(){
+    regWrite(PAGE_ID, 3); // turn to page 3
+    regWrite(GLOB_CMD, 0x01); // set Bias null bit in GLOB_CMD register
+    delay(20);
+    regWrite(PAGE_ID, 0); // turn to page 0 to continue normal operation
+    delay(20);
+    t_bias=millis(); 
+}
+
+uint32_t ADIS16448::getLastCalibTime(){
+    return t_bias;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -285,7 +339,12 @@ int16_t *ADIS16448::readAll(void) {
 /////////////////////////////////////////////////////////////////////////////////////////
 float ADIS16448::accelScale(int16_t sensorData)
 {
-  float finalData = sensorData * 0.0008; // Multiply by accel sensitivity (1/1200 g/LSB)
+  float finalData = sensorData * aScale; // Multiply by accel sensitivity (1/1200 g/LSB)
+  return finalData;
+}
+float ADIS16448::accelScale32(int32_t sensorData)
+{
+  float finalData = sensorData * aScale32; // Multiply by accel sensitivity (1/1200 g/LSB)
   return finalData;
 }
 
@@ -297,7 +356,12 @@ float ADIS16448::accelScale(int16_t sensorData)
 /////////////////////////////////////////////////////////////////////////////////////////
 float ADIS16448::gyroScale(int16_t sensorData)
 {
-  float finalData = sensorData * 0.02;
+  float finalData = sensorData * gScale;
+  return finalData;
+}
+float ADIS16448::gyroScale32(int32_t sensorData)
+{
+  float finalData = sensorData * gScale32;
   return finalData;
 }
 
@@ -309,7 +373,12 @@ float ADIS16448::gyroScale(int16_t sensorData)
 /////////////////////////////////////////////////////////////////////////////////////////
 float ADIS16448::gyroDeltaScale(int16_t sensorData)
 {
-  float finalData = sensorData * 0.022;
+  float finalData = sensorData * gDScale;
+  return finalData;
+}
+float ADIS16448::gyroDeltaScale32(int32_t sensorData)
+{
+  float finalData = sensorData * gDScale32;
   return finalData;
 }
 
@@ -334,7 +403,12 @@ float ADIS16448::tempScale(int16_t sensorData)
 /////////////////////////////////////////////////////////////////////////////////////////
 float ADIS16448::pressureScale(int16_t sensorData)
 {
-  float finalData = (sensorData * 0.04); // Multiply by barometer sensitivity (0.04 mBar/LSB)
+  float finalData = (sensorData * barScale); // Multiply by barometer sensitivity (0.04 mBar/LSB)
+  return finalData;
+}
+float ADIS16448::pressureScale32(int32_t sensorData)
+{
+  float finalData = (sensorData * barScale32); // Multiply by barometer sensitivity (0.04 mBar/LSB)
   return finalData;
 }
 
@@ -347,6 +421,6 @@ float ADIS16448::pressureScale(int16_t sensorData)
 /////////////////////////////////////////////////////////////////////////////////////////
 float ADIS16448::magnetometerScale(int16_t sensorData)
 {
-  float finalData = (sensorData * 0.1); // Multiply by sensor resolution (0.1 uGa/LSB)
+  float finalData = (sensorData * mScale); // Multiply by sensor resolution (0.1 uGa/LSB)
   return finalData;
 }

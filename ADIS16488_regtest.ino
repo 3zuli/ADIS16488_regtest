@@ -57,6 +57,8 @@ const float imu_dt = 1.0/(2460/4);
 // Initialize Variables
 // Temporary Data Array
 volatile int16_t *burstData;
+ImuDataRaw *imuDataRaw;
+ImuData *imuData;
 
 // Accelerometer
 float AXS, AYS, AZS = 0;
@@ -87,7 +89,8 @@ int printCounter = 0;
 // Call ADIS16448 Class
 ADIS16448 IMU(10,2,6); // Chip Select, Data Ready, Reset Pin Assignments
 
-uint32_t t_start, t_prev;
+uint32_t t_start, t_prev, t_bias;
+bool bias_set = false;
 
 void setup()
 {
@@ -115,9 +118,11 @@ void setup()
     //MSC = IMU.regRead(MSC_CTRL);
 //    SENS = IMU.regRead(SENS_AVG);
     //SMPL = IMU.regRead(SMPL_PRD);
+//    Serial.println("start");
 
     t_start = millis();
     t_prev=t_start;
+    t_bias=t_start;
     attachInterrupt(2, grabData, RISING); // Attach interrupt to pin 2. Trigger on the rising edge
 //    int i=0;
 //    while(1){
@@ -141,18 +146,29 @@ void grabData()
     grabcnt++;
     IMU.configSPI(); // Configure SPI before the read. Useful when talking to multiple SPI devices
 //    burstData = IMU.burstRead(); // Read data and insert into array
-    burstData = IMU.readAll();
+    imuDataRaw = IMU.readAll();
+    digitalWrite(dbgpin,LOW);
+    digitalWrite(dbgpin,HIGH);
+    imuData = IMU.scaleData(imuDataRaw);
     digitalWrite(dbgpin,LOW);
     digitalWrite(dbgpin,HIGH);
 //    gdxraw += *(burstData + 12);
 //    gdyraw += *(burstData + 13);
 //    gdzraw += *(burstData + 14);
-    GINTX += IMU.gyroScale(*(burstData + 1))*imu_dt; //Scale X Gyro
-    GINTY += IMU.gyroScale(*(burstData + 2))*imu_dt; //Scale Y Gyro
-    GINTZ += IMU.gyroScale(*(burstData + 3))*imu_dt; //Scale Z Gyro
-    GDELTAXS += *(burstData + 12)*gdelta_scale;
-    GDELTAYS += *(burstData + 13)*gdelta_scale;
-    GDELTAZS += *(burstData + 14)*gdelta_scale;
+//    GINTX += IMU.gyroScale(*(burstData + 1))*imu_dt; //Scale X Gyro
+//    GINTY += IMU.gyroScale(*(burstData + 2))*imu_dt; //Scale Y Gyro
+//    GINTZ += IMU.gyroScale(*(burstData + 3))*imu_dt; //Scale Z Gyro
+//    GDELTAXS += *(burstData + 12)*gdelta_scale;
+//    GDELTAYS += *(burstData + 13)*gdelta_scale;
+//    GDELTAZS += *(burstData + 14)*gdelta_scale;
+
+    GINTX += imuData->gx*imu_dt; //Scale X Gyro
+    GINTY += imuData->gy*imu_dt; //Scale Y Gyro
+    GINTZ += imuData->gz*imu_dt; //Scale Z Gyro
+    GDELTAXS += imuData->gdx; //*(burstData + 12)*gdelta_scale;
+    GDELTAYS += imuData->gdy; //*(burstData + 13)*gdelta_scale;
+    GDELTAZS += imuData->gdz; //*(burstData + 14)*gdelta_scale;
+
     digitalWrite(dbgpin,LOW);
     attachInterrupt(2,grabData,RISING);
 }
@@ -180,9 +196,7 @@ void scaleData()
 }
 
 // Main loop. Print data to the serial port. Sensor sampling is performed in the ISR
-void loop()
-{   
-    
+void loop() {   
     //uint32_t t_start = millis();
     //IMU.configSPI(); // Configure SPI before the read. Useful when talking to multiple SPI devices
     //burstData = IMU.burstRead(); // Read data and insert into array
@@ -197,7 +211,31 @@ void loop()
         grabcnt=0;
         t_prev = t_now;
     }
-    scaleData();
+    
+//    if(t_now-t_bias>30000 && !bias_set){
+//        IMU.regWrite(PAGE_ID, 3); // turn to page 3
+//        IMU.regWrite(GLOB_CMD, 0x01); // set Bias null bit in GLOB_CMD register
+//        delay(20);
+//    //    Serial.println(IMU.regRead(0x0E),HEX);
+//    //    delay(2000);
+//        IMU.regWrite(PAGE_ID, 0); // turn to page 0 to continue normal operation
+//        delay(20);
+//        bias_set=true;
+//        t_bias=t_now;
+//        Serial.println("bias null");
+//    }
+    //scaleData();
+
+//    Serial.print(imuData->gx,4); Serial.print(",");
+//    Serial.print(imuData->gy,4); Serial.print(",");
+//    Serial.print(imuData->gz,4); Serial.print(",");
+//    Serial.print(imuData->ax,4); Serial.print(",");
+//    Serial.print(imuData->ay,4); Serial.print(",");
+//    Serial.print(imuData->az,4); Serial.print(",");
+//    Serial.print(imuData->mx); Serial.print(",");
+//    Serial.print(imuData->my); Serial.print(",");
+//    Serial.print(imuData->mz); Serial.print(",");
+    
 //    Serial.print(GXS); Serial.print(",");
 //    Serial.print(GYS); Serial.print(",");
 //    Serial.print(GZS); Serial.print(",");
@@ -208,10 +246,10 @@ void loop()
 //      Serial.print((*(burstData + 12))); Serial.print(",");
 //      Serial.print((*(burstData + 13))); Serial.print(",");
 //      Serial.print((*(burstData + 14))); Serial.print(",");
-    Serial.print(GDELTAXS); Serial.print(",");
-    Serial.print(GDELTAYS); Serial.print(",");
-    Serial.print(GDELTAZS); Serial.print(",");
-//    Serial.print(GINTX); Serial.print(",");
+    Serial.print(GDELTAXS,4); Serial.print(",");
+//    Serial.print(GDELTAYS); Serial.print(",");
+//    Serial.print(GDELTAZS); Serial.print(",");
+    Serial.print(GINTX,4); Serial.print(",");
 //    Serial.print(GINTY); Serial.print(",");
 //    Serial.print(GINTZ); Serial.print(",");
 
@@ -224,6 +262,18 @@ void loop()
 //    Serial.print(BAROS); Serial.print(",");
 ////    Serial.print((*(burstData + 7))); Serial.print(","); // temperature test
 //    Serial.print(TEMPS); //Serial.print(",");
+
+    if(t_now-t_bias>30000 && IMU.getLastCalibTime()==0){
+        IMU.calibrateBiasNull();
+        t_bias=t_now;
+        GINTX = 0; GINTY = 0; GINTZ = 0; 
+        GDELTAXS = 0; GDELTAYS = 0; GDELTAZS = 0;
+        Serial.print("calib bias null start");
+    }
+//    if(IMU.isCalibrating())
+//        Serial.print("C");
+
+      
     Serial.println();
     attachInterrupt(2, grabData, RISING);
     delay(50);

@@ -35,6 +35,7 @@
 #define ADIS16448_h
 #include "Arduino.h"
 #include <SPI.h>
+#include <cmath>
 
 #define ADIS16480_PAGE_SIZE 0x80
 #define ADIS16480_REG(page, reg) ((page) * ADIS16480_PAGE_SIZE + (reg))
@@ -76,7 +77,7 @@
 //#define SENS_AVG 0x38   //Digital filter control
 #define SEQ_CNT 0x3A    //MAGN_OUT and BARO_OUT counter
 #define DIAG_STAT ADIS16480_REG(0x00,0x0A)  //System status
-#define GLOB_CMD 0x3E   //System command
+#define GLOB_CMD ADIS16480_REG(0x03,0x02)   //System command
 #define ALM_MAG1 0x40   //Alarm 1 amplitude threshold
 #define ALM_MAG2 0x42   //Alarm 2 amplitude threshold
 #define ALM_SMPL1 0x44  //Alarm 1 sample size
@@ -86,6 +87,23 @@
 #define LOT_ID2 0x54    //Lot identification number
 #define PROD_ID ADIS16480_REG(0x00,0x7E)    //Product identifier
 #define SERIAL_NUM ADIS16480_REG(0x04,0x20) //Lot-specific serial number
+
+typedef struct ImuDataRaw {
+  int32_t gx, gy, gz;
+  int32_t gdx, gdy, gdz;    
+  int32_t ax, ay, az; 
+  int16_t mx, my, mz; 
+  int32_t baro;
+  int16_t temp;
+} ImuDataRaw;
+
+typedef struct ImuData {
+  float gx, gy, gz;
+  float gdx, gdy, gdz;    
+  float ax, ay, az; 
+  float mx, my, mz;  
+  float baro, temp; 
+} ImuData;
 
 // ADIS16448 class definition
 class ADIS16448 {
@@ -99,22 +117,11 @@ public:
   // Destructor
   ~ADIS16448();
 
-  struct ImuDataRaw {
-    int32_t gx, gy, gz;
-    int32_t gdx, gdy, gdz;    
-    int32_t ax, ay, az; 
-    int32_t mx, my, mz; 
-  };
-
-  struct ImuData {
-    float gx, gy, gz;
-    float gdx, gdy, gdz;    
-    float ax, ay, az; 
-    float mx, my, mz;   
-  };
-
   // Performs hardware reset by sending pin 8 low on the DUT for 2 seconds
   int resetDUT(uint8_t ms);
+
+  // Performs software reset by setting Software reset bit in GLOB_CMD reg
+  int swReset();
 
   // Sets SPI bit order, clock divider, and data mode
   int configSPI();
@@ -122,7 +129,7 @@ public:
   // Read single register from sensor
   int16_t regRead(uint8_t regAddr);
 
-  // Read OUT register and its corresponding LOW register from sensor
+  // Read OUT register and its corresponding LOW register from sensor as a 32bit value
   int32_t regRead32(uint8_t regAddr);
 
   // Write register
@@ -132,22 +139,32 @@ public:
   int16_t *burstRead(void);
 
   // Sequentially read all sensor data
-  int16_t *readAll(void);
+  ImuDataRaw *readAll(void);
+
+  ImuData *scaleData(ImuDataRaw *raw);
+
+  void calibrateBiasNull();
+
+  uint32_t getLastCalibTime();
 
   // Scale accelerator data
   float accelScale(int16_t sensorData);
+  float accelScale32(int32_t sensorData);
 
   // Scale gyro data
   float gyroScale(int16_t sensorData);
+  float gyroScale32(int32_t sensorData);
 
   // Scale gyro DELTAANG data
   float gyroDeltaScale(int16_t sensorData);
+  float gyroDeltaScale32(int32_t sensorData);
 
   // Scale temperature data
   float tempScale(int16_t sensorData);
 
  //Scale barometer data. Returns scaled data as float.
   float pressureScale(int16_t sensorData);
+  float pressureScale32(int32_t sensorData);
 
   //Scale magnetometer data. Returns scaled data as float.
   float magnetometerScale(int16_t sensorData);
@@ -159,6 +176,19 @@ private:
   int _RST;
   int _stall = 1; //20
 
+  uint32_t t_bias = 0; // Time of last bias calibration
+
+  // Scale factors
+  const float G = 9.798; // 1G = 9.798 m.s^-2 https://ez.analog.com/docs/DOC-2755
+  const float gScale    = 0.02; // 0.02deg/s/LSB
+  const float gScale32  = 0.02/pow(2,16); 
+  const float gDScale   = 720.0/pow(2,15); // 0.022deg/LSB
+  const float gDScale32 = 720.0/pow(2,31);
+  const float aScale    = 0.0008; // 0.8mg/LSB
+  const float aScale32  = 0.0008/pow(2,16);
+  const float mScale    = 0.1;  // (0.1 uGa/LSB)
+  const float barScale  = 0.0004; //  40mbar/LSB
+  const float barScale32= 1.31/pow(2,31);
 };
 
 #endif
