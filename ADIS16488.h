@@ -117,11 +117,11 @@ public:
   // Destructor
   ~ADIS16488();
 
-  // Performs hardware reset by sending pin 8 low on the DUT for 2 seconds
+  // Performs a hardware reset by sending pin 8 low on the DUT for 2 seconds
   int resetDUT(uint8_t ms);
 
-  // Performs software reset by setting Software reset bit in GLOB_CMD reg
-  int swReset();
+  // Performs a software reset by setting Software reset bit in GLOB_CMD register
+  void swReset();
 
   // Sets SPI bit order, clock divider, and data mode
   int configSPI();
@@ -143,8 +143,10 @@ public:
 
   ImuData *scaleData(ImuDataRaw *raw);
 
+  // Trigger the bias null command. ADIS calculates gyro biases and stores them 
   void calibrateBiasNull();
 
+  // Get time in milliseconds from last gyro calibration
   uint32_t getLastCalibTime();
 
   // Scale accelerator data

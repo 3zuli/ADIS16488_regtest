@@ -44,11 +44,14 @@
 #include "ADIS16488.h"
 #include <SPI.h>
 #include <cmath>
+#include <cstring>
+#include "crc.h"
 
 // Uncomment to enable debug
 //#define DEBUG
 
 const int dbgpin = 3;
+const int ledpin = 6;
 
 //const float gdelta_scale = 0.022; // 720.0/(2^15);
 //const float gscale = 450.0/pow(2,31);
@@ -82,6 +85,21 @@ int SMPL = 0;
 // Temperature
 float TEMPS = 0;
 
+// Struct used to send serial data
+typedef struct SerialOutMsg {
+    SerialOutMsg(): h1(0x42), h2(0x43), h3(0x44), h4(0x45){} // magic init by Mato
+    
+    uint8_t h1, h2, h3, h4; // header 0x42 0x43 0x44 0x45
+    uint32_t count;         // packet counter
+    float gx, gy, gz;       // gyro rate xyz
+    float gintx, ginty, gintz; // gyro integrated angle xyz   
+    float ax, ay, az;       // accelerometer xyz
+    float mx, my, mz;       // magnetometer xyz
+    float baro, temp;       // barometric pressure, temperature
+} __attribute__((packed)) SerialOutMsg;
+
+SerialOutMsg outMsg; //= {0};
+
 // Delay counter variable
 int printCounter = 0;
 
@@ -95,22 +113,23 @@ void setup()
 {
     Serial.begin(115200); // Initialize serial output via USB
     pinMode(dbgpin, OUTPUT);
+    pinMode(ledpin, OUTPUT);
+    digitalWrite(ledpin, LOW);
     IMU.configSPI(); // Configure SPI communication
     delay(1000); // Give the part time to start up
 
-    // Set decimation rate to 4 -> 616Hz
-    IMU.regWrite(PAGE_ID, 3); // turn to page 3
-    IMU.regWrite(DEC_RATE, 0x03); // set DEC_RATE to 3 -> decimation = 3+1=4
-    delay(20);
-//    Serial.println(IMU.regRead(0x0E),HEX);
-//    delay(2000);
-    IMU.regWrite(PAGE_ID, 0); // turn to page 0 to continue normal operation
-    delay(20);
-
+    // Configure IMU settings
+    IMUconfig();
 
     t_start = millis();
     t_prev=t_start;
     t_bias=t_start;
+    
+    outMsg.count=0;
+
+//    Serial.println(sizeof(SerialOutMsg));
+//    delay(2000);
+    
     attachInterrupt(2, grabData, RISING); // Attach interrupt to pin 2. Trigger on the rising edge
 //    int i=0;
 //    while(1){
@@ -120,12 +139,29 @@ void setup()
 ////      delay(1);
 ////      IMU.regWrite(PAGE_ID,3);
 ////      Serial.println(IMU.regRead(PAGE_ID));
-////      Serial.println(IMU.regRead32(XGYRO_OUT)*gscale);
+//      Serial.println(IMU.regRead32(XGYRO_OUT));
 //      //Serial.println(String(i++)+": "+IMU.regRead(PROD_ID)+" "+IMU.regRead(XGYRO_OUT));
 //    }
 }
 
+void IMUconfig(){
+    // Set decimation rate to 4 -> 616Hz
+    IMU.regWrite(PAGE_ID, 3); // turn to page 3
+    IMU.regWrite(DEC_RATE, 0x03); // set DEC_RATE to 3 -> decimation = 3+1=4
+    delay(20);
+//    Serial.println(IMU.regRead(0x0E),HEX);
+//    delay(2000);
+    IMU.regWrite(PAGE_ID, 0); // turn to page 0 to continue normal operation
+    delay(20);
+}
+
+void resetIntAngles(){
+    GINTX = 0; GINTY = 0; GINTZ = 0; 
+    GDELTAXS = 0; GDELTAYS = 0; GDELTAZS = 0;
+}
+
 volatile uint32_t grabcnt = 0;
+volatile int ledcnt = 0;
 // Function used to read register values when an ISR is triggered using the IMU's DataReady output
 void grabData()
 {
@@ -133,7 +169,6 @@ void grabData()
     digitalWrite(dbgpin,HIGH);
     grabcnt++;
     IMU.configSPI(); // Configure SPI before the read. Useful when talking to multiple SPI devices
-//    burstData = IMU.burstRead(); // Read data and insert into array
     imuDataRaw = IMU.readAll();
     digitalWrite(dbgpin,LOW);
     digitalWrite(dbgpin,HIGH);
@@ -158,6 +193,10 @@ void grabData()
     GDELTAZS += imuData->gdz; //*(burstData + 14)*gdelta_scale;
 
     digitalWrite(dbgpin,LOW);
+    if(++ledcnt == 100){
+        ledcnt = 0;
+        digitalWrite(ledpin, !digitalRead(ledpin));
+    }
     attachInterrupt(2,grabData,RISING);
 }
 
@@ -177,6 +216,66 @@ void loop() {
         grabcnt=0;
         t_prev = t_now;
     }
+
+    if(Serial.available()>2){
+        uint8_t b1 = Serial.read();
+        uint8_t b2 = Serial.read();
+        uint8_t cmd = Serial.read();
+        //Serial.println(String(b1)+" "+b2+" "+cmd);
+        if(b1==50 && b2==87){
+            switch(cmd){
+              case 139: // Trigger gyro offset calibration
+                  digitalWrite(ledpin,HIGH);
+                  IMU.calibrateBiasNull();
+                  delay(2000);
+                  digitalWrite(ledpin,LOW);
+                  break;
+              case 140: // Reset the IMU
+                  digitalWrite(ledpin,HIGH);
+                  IMU.swReset();
+                  delay(100);
+                  IMUconfig();
+                  t_bias = t_now;
+                  digitalWrite(ledpin,LOW);
+                  break;
+              case 141: // Reset integrated gyro angles
+                  digitalWrite(ledpin,HIGH);
+                  resetIntAngles();
+                  digitalWrite(ledpin,LOW);
+                  break;
+              default:
+                break;
+            }
+        }
+    }
+
+    outMsg.count++;
+    outMsg.gx = imuData->gx; 
+    outMsg.gy = imuData->gy; 
+    outMsg.gz = imuData->gz;
+    outMsg.gintx = GDELTAXS; 
+    outMsg.ginty = GDELTAYS; 
+    outMsg.gintz = GDELTAZS;
+    outMsg.ax = imuData->ax; 
+    outMsg.ay = imuData->ay; 
+    outMsg.az = imuData->az;
+    outMsg.mx = imuData->mx; 
+    outMsg.my = imuData->my; 
+    outMsg.mz = imuData->mz;
+    outMsg.baro = imuData->baro;
+    outMsg.temp = imuData->temp;
+    uint8_t crc = computeCRC((uint8_t*)&outMsg, sizeof(SerialOutMsg));
+    
+//    Se
+    Serial.write(sizeof(SerialOutMsg));
+    Serial.write((char*)&outMsg, sizeof(SerialOutMsg));
+    Serial.write(crc);
+    Serial.write(0x51);
+    Serial.write(0x52);
+    Serial.write(0x53);
+    Serial.write(0x54);
+//    Serial.write(0x44);
+//    Serial.write('\n');
     
 //    if(t_now-t_bias>30000 && !bias_set){
 //        IMU.regWrite(PAGE_ID, 3); // turn to page 3
@@ -200,6 +299,7 @@ void loop() {
 //    Serial.print(imuData->mx); Serial.print(",");
 //    Serial.print(imuData->my); Serial.print(",");
 //    Serial.print(imuData->mz); Serial.print(",");
+//    Serial.print(imuData->temp); Serial.print(",");
     
 //    Serial.print(GXS); Serial.print(",");
 //    Serial.print(GYS); Serial.print(",");
@@ -211,10 +311,10 @@ void loop() {
 //      Serial.print((*(burstData + 12))); Serial.print(",");
 //      Serial.print((*(burstData + 13))); Serial.print(",");
 //      Serial.print((*(burstData + 14))); Serial.print(",");
-    Serial.print(GDELTAXS,4); Serial.print(",");
-//    Serial.print(GDELTAYS); Serial.print(",");
-//    Serial.print(GDELTAZS); Serial.print(",");
-    Serial.print(GINTX,4); Serial.print(",");
+//    Serial.print(GDELTAXS,4); Serial.print(",");
+//    Serial.print(GDELTAYS,4); Serial.print(",");
+//    Serial.print(GDELTAZS,4); Serial.print(",");
+//    Serial.print(GINTX,4); Serial.print(",");
 //    Serial.print(GINTY); Serial.print(",");
 //    Serial.print(GINTZ); Serial.print(",");
 
@@ -231,8 +331,7 @@ void loop() {
     if(t_now-t_bias>30000 && IMU.getLastCalibTime()==0){
         IMU.calibrateBiasNull();
         t_bias=t_now;
-        GINTX = 0; GINTY = 0; GINTZ = 0; 
-        GDELTAXS = 0; GDELTAYS = 0; GDELTAZS = 0;
+        resetIntAngles();
         Serial.print("calib bias null start");
     }
 
