@@ -5,12 +5,13 @@ TODOs:
 - Improve communication protocol
 - Convert this into a proper Arduino library with examples etc.
 
-###Communication protocol
+### Communication protocol
 
 Messages from the Teensy consist of a 4-byte header ```0x41 0x42 0x43 0x44```, 
 followed by the size of the payload, the payload itself, a 1-byte CRC 
 and a ```0x51 0x52 0x53 0x54``` trailing sequence.
-For a precise definition of the payload structure, see [ADIS16488_regtest.ino#L89](ADIS16488_regtest.ino#L89)
+For a precise definition of the payload structure, see [ADIS16488_regtest.ino#L89](ADIS16488_regtest.ino#L89).
+CRC algorithm is defined in [crc.h](crc.h)
 
 | Byte no. | Type | Description |
 | --- | --- | --- |
