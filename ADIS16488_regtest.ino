@@ -87,9 +87,10 @@ float TEMPS = 0;
 
 // Struct used to send serial data
 typedef struct SerialOutMsg {
-    SerialOutMsg(): h1(0x42), h2(0x43), h3(0x44), h4(0x45){} // magic init by Mato
+    SerialOutMsg(): h1(0x42), h2(0x43), h3(0x44), h4(0x45), _size(sizeof(SerialOutMsg)){} // magic init by Mato
     
     uint8_t h1, h2, h3, h4; // header 0x42 0x43 0x44 0x45
+    uint8_t _size;
     uint32_t count;         // packet counter
     float gx, gy, gz;       // gyro rate xyz
     float gintx, ginty, gintz; // gyro integrated angle xyz   
@@ -98,7 +99,7 @@ typedef struct SerialOutMsg {
     float baro, temp;       // barometric pressure, temperature
 } __attribute__((packed)) SerialOutMsg;
 
-SerialOutMsg outMsg; //= {0};
+SerialOutMsg outMsg; // Serial output data
 
 // Delay counter variable
 int printCounter = 0;
@@ -106,8 +107,12 @@ int printCounter = 0;
 // Call ADIS16488 Class
 ADIS16488 IMU(10,2,6); // Chip Select, Data Ready, Reset Pin Assignments
 
+// Various timing
 uint32_t t_start, t_prev, t_bias;
 bool bias_set = false;
+// Loop rate timing
+const int loop_period = 10; // 10ms = 100hz
+uint32_t t_expected = 0;
 
 void setup()
 {
@@ -124,10 +129,15 @@ void setup()
     t_start = millis();
     t_prev=t_start;
     t_bias=t_start;
+    t_expected = millis() + loop_period;
     
     outMsg.count=0;
 
 //    Serial.println(sizeof(SerialOutMsg));
+//    Serial.println(outMsg._size);
+//    while(1){
+//        delay(1000);
+//    }
 //    delay(2000);
     
     attachInterrupt(2, grabData, RISING); // Attach interrupt to pin 2. Trigger on the rising edge
@@ -161,8 +171,9 @@ void resetIntAngles(){
 }
 
 volatile uint32_t grabcnt = 0;
-volatile int ledcnt = 0;
+volatile int ledcnt1 = 0;
 // Function used to read register values when an ISR is triggered using the IMU's DataReady output
+
 void grabData()
 {
     detachInterrupt(2);
@@ -193,14 +204,39 @@ void grabData()
     GDELTAZS += imuData->gdz; //*(burstData + 14)*gdelta_scale;
 
     digitalWrite(dbgpin,LOW);
-    if(++ledcnt == 100){
-        ledcnt = 0;
-        digitalWrite(ledpin, !digitalRead(ledpin));
+    if(++ledcnt1 == 100){
+        ledcnt1 = 0;
+//        digitalWrite(ledpin, !digitalRead(ledpin));
+//    
+//        outMsg.count++;
+//        outMsg.gx = imuData->gx; 
+//        outMsg.gy = imuData->gy; 
+//        outMsg.gz = imuData->gz;
+//        outMsg.gintx = GDELTAXS; 
+//        outMsg.ginty = GDELTAYS; 
+//        outMsg.gintz = GDELTAZS;
+//        outMsg.ax = imuData->ax; 
+//        outMsg.ay = imuData->ay; 
+//        outMsg.az = imuData->az;
+//        outMsg.mx = imuData->mx; 
+//        outMsg.my = imuData->my; 
+//        outMsg.mz = imuData->mz;
+//        outMsg.baro = imuData->baro;
+//        outMsg.temp = imuData->temp;
+//        uint8_t crc = computeCRC((uint8_t*)&outMsg, sizeof(SerialOutMsg));
+//        Serial.write((char*)&outMsg, sizeof(SerialOutMsg));
+//        Serial.write(crc);
+//        Serial.write(0x51);
+//        Serial.write(0x52);
+//        Serial.write(0x53);
+//        Serial.write(0x54);
+//        Serial.flush();
     }
     attachInterrupt(2,grabData,RISING);
 }
 
 // Main loop. Print data to the serial port. Sensor sampling is performed in the ISR
+int ledcnt2 = 0;
 void loop() {   
     //uint32_t t_start = millis();
     //IMU.configSPI(); // Configure SPI before the read. Useful when talking to multiple SPI devices
@@ -210,12 +246,12 @@ void loop() {
     detachInterrupt(2); //Detach interrupt to avoid overwriting data
     uint32_t t_now = millis();
     uint32_t dt = t_now-t_prev;
-    if(dt>500){
-        //Serial.println(grabcnt);
-//        Serial.println(1000*grabcnt/(float)dt);
-        grabcnt=0;
-        t_prev = t_now;
-    }
+//    if(dt>500){
+//        //Serial.println(grabcnt);
+////        Serial.println(1000*grabcnt/(float)dt);
+//        grabcnt=0;
+//        t_prev = t_now;
+//    }
 
     if(Serial.available()>2){
         uint8_t b1 = Serial.read();
@@ -249,7 +285,13 @@ void loop() {
         }
     }
 
+    if(++ledcnt2 == 10){
+        ledcnt2 = 0;
+        digitalWrite(ledpin, !digitalRead(ledpin));
+    }
+    
     outMsg.count++;
+//    Serial.println(outMsg.count);
     outMsg.gx = imuData->gx; 
     outMsg.gy = imuData->gy; 
     outMsg.gz = imuData->gz;
@@ -265,15 +307,15 @@ void loop() {
     outMsg.baro = imuData->baro;
     outMsg.temp = imuData->temp;
     uint8_t crc = computeCRC((uint8_t*)&outMsg, sizeof(SerialOutMsg));
-    
-//    Se
-    Serial.write(sizeof(SerialOutMsg));
+
     Serial.write((char*)&outMsg, sizeof(SerialOutMsg));
     Serial.write(crc);
     Serial.write(0x51);
     Serial.write(0x52);
     Serial.write(0x53);
     Serial.write(0x54);
+    Serial.flush();
+
 //    Serial.write(0x44);
 //    Serial.write('\n');
     
@@ -329,14 +371,29 @@ void loop() {
 //    Serial.print(TEMPS); //Serial.print(",");
 
     if(t_now-t_bias>30000 && IMU.getLastCalibTime()==0){
+//        Serial.print("\n\ncalib bias null start\n\n");
         IMU.calibrateBiasNull();
         t_bias=t_now;
         resetIntAngles();
-        Serial.print("calib bias null start");
+//        Serial.print("\n\ncalib bias null end\n\n");
     }
 
-      
-    Serial.println();
+
+//    Serial.println();
+//    Serial.println(1000.0/dt);
     attachInterrupt(2, grabData, RISING);
-    delay(50);
+    delay(loop_period);
+
+//    t_prev = t_now;
+//    t_now = millis();
+//    uint32_t delta = t_now - t_expected;
+//    t_expected += loop_period;
+//    uint32_t sleeptime = loop_period-delta;
+//    if(sleeptime<0){
+//        sleeptime=0;
+//        t_expected += loop_period;
+//    }
+//    else {
+//        delay(sleeptime);
+//    }
 }
